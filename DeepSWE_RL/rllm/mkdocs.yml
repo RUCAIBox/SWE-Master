@@ -1,0 +1,110 @@
+site_name: rLLM
+site_description: A library for training LLM agents with reinforcement learning
+repo_url: https://github.com/agentica-project/rllm
+docs_dir: docs
+theme:
+  name: material
+  logo: assets/agentica-logo.png
+  favicon: assets/agentica-logo-black.png
+  palette:
+    primary: black
+    accent: black
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.tabs
+    - navigation.sections
+    - navigation.top
+    - navigation.expand
+    - navigation.indexes
+    - content.code.copy
+    - content.code.annotate
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          paths: [../]
+          options:
+            docstring_style: google
+            show_source: true
+            show_root_heading: true
+            show_root_toc_entry: true
+            show_signature_annotations: true
+            separate_signature: true
+            show_symbol_type_heading: true
+            show_symbol_type_toc: true
+
+watch:
+  - ./rllm/
+
+markdown_extensions:
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets:
+      base_path: ['.', '..']
+      check_paths: true
+  - pymdownx.superfences
+  - admonition
+  - pymdownx.details
+  - pymdownx.tabbed:
+      alternate_style: true
+  - tables
+  - footnotes
+
+nav:
+  - Home: 
+      - Overview: index.md
+      - Getting Started:
+        - Installation Guide: getting-started/installation.md
+        - Quick Start: getting-started/quick-start.md
+      - Core Concepts:
+        - rLLM's Main Components: core-concepts/overview.md
+        - Agent and Environment: core-concepts/agent_env.md
+        - AgentExecutionEngine for Trajectory Rollout: core-concepts/execution-engine.md
+        - AgentTrainer for RL Training: core-concepts/training.md
+        - RL Algorithms for Agents: core-concepts/rl-algos.md
+      - Examples: examples/index.md
+      - API Reference: api/index.md
+      - Contributing: contributing.md
+  - Getting Started:
+      - Installation: getting-started/installation.md
+      - Quick Start: getting-started/quick-start.md
+  - Core Concepts:
+      - rLLM's Main Components: core-concepts/overview.md
+      - Agent and Environment: core-concepts/agent_env.md
+      - AgentExecutionEngine for Trajectory Rollout: core-concepts/execution-engine.md
+      - AgentTrainer for RL Training: core-concepts/training.md
+      - RL Algorithms for Agents: core-concepts/rl-algos.md
+  - Examples:
+      - Overview: examples/index.md
+      - DeepScaleR: examples/deepscaler.md
+      - DeepCoder: examples/deepcoder.md
+      - DeepSWE: examples/swe.md
+      - Search Agent: examples/search.md
+      - FrozenLake Agent: examples/frozenlake.md
+      - Math SFT: examples/sft.md
+
+  - API Reference:
+      - Overview: api/index.md
+      - Agents:
+          - Agent Base: api/agents/agent.md
+          - Agent Utils: api/agents/utils.md
+      - Environments:
+          - Environment Base: api/environments/base.md
+          - Environment Utils: api/environments/env_utils.md
+      - Engine:
+          - Agent Execution Engine: api/engine/agent_execution_engine.md
+      - Trainer:
+          - Agent Trainer: api/trainer/agent_trainer.md
+      - Tools:
+          - Tool Base Classes: api/tools/tool_base.md
+          - Tool Registry: api/tools/registry.md
+          - Web Tools: api/tools/web_tools.md
+          - Code Tools: api/tools/code_tools.md
+      - Parser:
+          - Tool Parsers: api/parser/tool_parser.md
+          - Chat Parsers: api/parser/chat_parser.md
+  - Contributing: contributing.md

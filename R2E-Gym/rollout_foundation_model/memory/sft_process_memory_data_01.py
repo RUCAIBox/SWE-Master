@@ -1,0 +1,340 @@
+import json
+import os
+import pandas as pd
+import re
+import html
+from copy import deepcopy
+
+FC_SP = '''## Function Definition
+- You have access to the following functions:
+
+---- BEGIN FUNCTION #1: execute_bash ----
+**Description**: Execute a bash command in the terminal within a persistent shell session.
+* One command at a time: You can only execute one bash command at a time. If you need to run multiple commands sequentially, use `&&` or `;` to chain them together.
+* Persistent session: Commands execute in a persistent shell session where environment variables, virtual environments, and working directory persist between commands.
+* Soft timeout: Commands have a soft timeout of 10 seconds, once that's reached, you have the option to continue or interrupt the command
+* Shell options: Do NOT use `set -e`, `set -eu`, or `set -euo pipefail` in shell scripts or commands in this environment. The runtime may not support them and can cause unusable shell sessions. If you want to run multi-line bash commands, write the commands to a file and then run it, instead.
+* For commands that may run indefinitely, run them in the background and redirect output to a file, e.g. `python3 app.py > server.log 2>&1 &`.
+* Directory verification: Before creating new directories or files, first verify the parent directory exists and is the correct location.
+* Directory management: Try to maintain working directory by using absolute paths and avoiding excessive use of `cd`.
+* Output truncation: If the output exceeds a maximum length, it will be truncated before being returned.
+
+**Parameters**:
+(1) command (string, required): The bash command to execute. For example: `python my_script.py`. If not provided, will show help. Can be empty string to view additional logs when previous exit code is `-1`. Can be `C-c` (Ctrl+C) to interrupt the currently running process. Note: You can only execute one bash command at a time. If you need to run multiple commands sequentially, you can use `&&` or `;` to chain them together."
+---- END FUNCTION #1 ----
+
+
+---- BEGIN FUNCTION #2: submit ----
+**Description**: Finish the interaction when the task is complete OR if the assistant cannot proceed further with the task.
+No parameters are required for this function.
+---- END FUNCTION #2 ----
+
+
+---- BEGIN FUNCTION #3: str_replace_editor ----
+**Description**: Custom editing tool for viewing, creating and editing files
+* State is persistent across command calls and discussions with the user
+* If `path` is a file, `view` displays the result of applying `cat -n`. If `path` is a directory, `view` lists non-hidden files and directories up to 2 levels deep
+* The `create` command cannot be used if the specified `path` already exists as a file
+* The following binary file extensions can be viewed in Markdown format: [\".xlsx\", \".pptx\", \".wav\", \".mp3\", \".m4a\", \".flac\", \".pdf\", \".docx\"]. IT DOES NOT HANDLE IMAGES.\n* The create command cannot be used if the specified path already exists as a file
+* If a `command` generates a long output, it will be truncated and marked with `<response clipped>`
+Notes for using the `str_replace` command:
+* The `old_str` parameter should match EXACTLY one or more consecutive lines from the original file. Be mindful of whitespaces!
+* If the `old_str` parameter is not unique in the file, the replacement will not be performed. Make sure to include enough context in `old_str` to make it unique.
+* The `new_str` parameter should contain the edited lines that should replace the `old_str`
+* This tool can be used for creating and editing files in plain-text format.
+* Before using this tool:
+- 1. Use the view tool to understand the file's contents and context
+- 2. Verify the directory path is correct (only applicable when creating new files):
+    - Use the view tool to verify the parent directory exists and is the correct location
+    - When making edits:
+    - Ensure the edit results in idiomatic, correct code
+    - Do not leave the code in a broken state
+    - Always use absolute file paths (starting with /)
+* Remember: when making multiple file edits in a row to the same file, you should prefer to send all edits in a single message with multiple calls to this tool, rather than multiple messages with a single call each.
+
+**Parameters**:
+(1) command (string, required): The commands to run. Allowed options are: `view`, `create`, `str_replace`, `insert`.
+(2) path (string, required): Absolute path to file or directory, e.g. `/repo/file.py` or `/repo`.
+(3) file_text (string, optional): Required parameter of `create` command, with the content of the file to be created.
+(4) old_str (string, optional): Required parameter of `str_replace` command containing the string in `path` to replace.
+(5) new_str (string, optional): Optional parameter of `str_replace` command containing the new string (if not given, no string will be added). Required parameter of `insert` command containing the string to insert.
+(6) insert_line (integer, optional): Required parameter of `insert` command. The `new_str` will be inserted AFTER the line `insert_line` of `path`.
+(7) view_range (array, optional): Optional parameter of `view` command when `path` points to a file. If none is given, the full file is shown. If provided, the file will be shown in the indicated line number range, e.g. [11, 12] will show lines 11 and 12. Indexing at 1 to start. Setting `[start_line, -1]` shows all lines from `start_line` to the end of the file.
+---- END FUNCTION #3 ----
+
+If you choose to call a function ONLY reply in the following format with NO suffix:
+
+<function=example_function_name>
+<parameter=example_parameter_1>value_1</parameter>
+<parameter=example_parameter_2>
+This is the value for the second parameter
+that can span
+multiple lines
+</parameter>
+</function>
+
+<IMPORTANT>
+Reminder:
+- Function calls MUST follow the specified format, start with <function= and end with </function>
+- Required parameters MUST be specified
+- Only call one function at a time
+- VERY IMPORTANT: Each response must include both reasoning (as natural text) and function call (in above format) to solve the task.
+</IMPORTANT>
+'''
+
+def judge_instance_id_whether_in_memory(trajectory_steps,instance_id, memory_json_dir):
+    memory_json_file = os.path.join(memory_json_dir, f"{instance_id}.json")
+    with open(memory_json_file, "r") as f:
+        memory_data = json.load(f) 
+
+    last_observation_recorded_by_memory = memory_data['history'][-1]['content']
+    last_observation_traj = trajectory_steps[-1]['observation']
+
+    if last_observation_recorded_by_memory == last_observation_traj:
+        return True
+    else:
+        return False
+ 
+def extract_content_after_think(text):
+    # Use regular expressions to match <think> and all its internal content
+    # re.DOTALL allows . to match newline characters
+    # This pattern seeks the last </think> tag and captures everything following it
+    pattern = r".*</think>\s*(.*)"
+    
+    match = re.search(pattern, text, flags=re.DOTALL)
+    
+    if match:
+        return match.group(1).strip()
+    return text  # If the tag is not found, return the original string or handle as needed
+
+
+def extracted_memory(step_count, memory_counts, instance_id, memory_json_dir):
+    
+    memory_json_file = os.path.join(memory_json_dir, f"{instance_id}.json")
+    with open(memory_json_file, "r") as f:
+        memory_data = json.load(f) 
+
+    aggregated_summaries = memory_data['aggregated_summaries']
+
+    memory_messages = [
+        {
+            "role":"user",
+            "content": "<Memory>" + extract_content_after_think(aggregated_summaries[i]['summary']) + "</Memory>"
+        }
+        for i in range(memory_counts)
+    ]
+
+    return memory_messages
+
+def process_single_jsonl(jsonl_f, memory_json_dir):
+    messages_all = []
+    sub_data = {}
+    tot_count = 0
+
+    with open(jsonl_f,"r") as f:
+        for line in f:
+            tot_count+=1
+            messages = []
+            data=json.loads(line)
+            reward = data["reward"]
+            # print(data.keys())
+            # print(data["trajectory_steps"][0].keys())
+            # exit()
+            if reward !=1:
+                continue
+
+            instance_id = data['ds']['instance_id']
+            sub_data[instance_id] = []
+
+            reward = data["reward"]
+
+            if reward !=1:
+                continue
+
+            problem_statement = data["problem_statement"]
+            agent_args = data["agent_args"]
+            trajectory_steps = data["trajectory_steps"]
+
+            if not judge_instance_id_whether_in_memory(trajectory_steps, instance_id, memory_json_dir):
+                continue
+
+            # default_summary_window = data['agent_args']['other_args']['default_summary_window']
+            # default_keep_recent = data['agent_args']['other_args']['default_keep_recent']
+            # default_compression_trigger = data['agent_args']['other_args']['default_compression_trigger']
+            default_summary_window = 30
+            default_keep_recent = 10
+            default_compression_trigger = 40
+
+
+            # step_count = trajectory_steps[-1]["step_count"]
+            # token_usage_total = trajectory_steps[-1]["token_usage_total"]
+            sp_1 = agent_args["system_prompt"]
+            sp_2 = agent_args["instance_prompt"]
+            
+            sp_2 = sp_2.replace("{problem_statement}",problem_statement).replace("{working_dir}","/testbed")
+            
+            
+            messages.append({"role":"system","content":sp_1})
+            messages.append({"role":"system","content":FC_SP})
+            messages.append({"role":"user","content":sp_2})
+
+            memory_counts = 0
+
+            for step in trajectory_steps:
+                step_count = step['step_idx']
+                if instance_id == "Infinidat__munch-52" and step_count == 115:
+                    pass
+                if step_count == 0:
+                    new_messages = deepcopy(messages) # system prompt
+
+                # elif step == 15:
+
+                #     # Calculate summary count
+                #     memory_counts = (step-5) / 10
+
+                #     slide_window_messages = deepcopy(new_messages[:-10]) # Information of the last 5 turns
+                #     new_messages = messages # system prompt
+
+                #     memory = extracted_memory(memory_counts, instance_id, memory_json_dir)
+
+                #     new_messages.extend(memory) # Add memory into the context window
+                #     new_messages.extend(slide_window_messages) # Add the last 5 turns of information into the context window
+                    
+                elif step_count >= default_compression_trigger and (step_count-default_keep_recent) % default_summary_window == 0: # Extract memory
+
+                    # Calculate summary count
+                    memory_counts = int((step_count-default_keep_recent) / default_summary_window)
+
+                    slide_window_messages = deepcopy(new_messages[-default_keep_recent*2:]) # Information of the last 5 turns
+                    new_messages = deepcopy(messages) # system prompt
+
+                    memory = extracted_memory(step_count, memory_counts, instance_id, memory_json_dir)
+
+                    new_messages.extend(memory) # Add memory into the context window
+                    new_messages.extend(slide_window_messages) # Add the last 5 turns of information into the context window            
+
+
+                # for k,v in step.items():
+                #     print(f"{k}: {[v]}")
+                # print("=="*80)
+                thought = step["thought"]
+                # print(thought)
+                # exit()
+                # content_short = thought.strip().split("</think>")
+
+                # if len(content_short)>=2:
+                #     print(content_short)
+                action = step["action"]
+                observation = step["observation"]
+                new_messages.append({"role":"assistant","content":thought+"\n\n"+action})
+                new_messages.append({"role":"tool","content":observation})
+
+                if (step_count +1) >= default_compression_trigger and (step_count +1 - default_keep_recent) % default_summary_window == 0:
+
+                    tot_count += 1
+
+                    token_usage_total = step["token_usage_total"]
+                    idx = jsonl_f +"@"+ str(tot_count) + "_" + instance_id + "@" + str(memory_counts)
+                    messages_all.append([new_messages,step_count,token_usage_total,idx])
+                    
+                elif (step_count +1)  == len(trajectory_steps):
+                    
+                    tot_count += 1
+                    
+                    token_usage_total = step["token_usage_total"]
+                    idx = jsonl_f +"@"+ str(tot_count) + "_" + instance_id + "@" + str(memory_counts)
+                    messages_all.append([new_messages,step_count,token_usage_total,idx])
+                    sub_data[instance_id].append([new_messages, step_count, token_usage_total, idx])
+
+            file_name = jsonl_f.split("/")[-1]
+        if tot_count!=0:
+            print(f"{file_name}:\nTotal count: {tot_count}, Reward=1 count: {len(messages_all)}, Retention rate: {len(messages_all)/tot_count}")
+            print("=="*50)
+        else:
+            print(f"{file_name}:\nTotal count: {tot_count}")
+
+    return messages_all
+
+def process_folders_to_jsonl(folder_list, memory_folder_list, output_jsonl):
+    """Pass multiple folders, process all jsonl files under them, and merge the output"""
+    merged_messages = []
+
+    # for folder, memory_folder in zip(folder_list, memory_folder_list):
+    #     for name in os.listdir(folder):
+    #         if name.endswith(".jsonl"):
+    #             full_path = os.path.join(folder, name)
+                
+    #             if "verified" in full_path:
+    #                 print(f"This file is a test set, skipping: {full_path}")
+    #                 print(f"=="*50)
+    #                 continue
+    #             print(f"Processing: {full_path}")
+    #             msgs = process_single_jsonl(full_path, memory_folder)
+    #             merged_messages.extend(msgs)
+
+    for full_path, memory_folder in zip(folder_list, memory_folder_list):
+                
+        if "verified" in full_path:
+            print(f"This file is a test set, skipping: {full_path}")
+            print(f"=="*50)
+            continue
+        print(f"Processing: {full_path}")
+        msgs = process_single_jsonl(full_path, memory_folder)
+        merged_messages.extend(msgs)
+
+
+    save_messages_to_jsonl(merged_messages, output_jsonl)
+    print(f"\nDone! Total trajectories = {len(merged_messages)}")
+    print(f"Saved to: {output_jsonl}")
+
+def save_messages_to_jsonl(messages_all, output_jsonl):
+    """Write messages_all into a jsonl file"""
+    if not output_jsonl:
+        return 
+    else:
+        with open(output_jsonl, "w") as f:
+            for msgs in messages_all:
+                # obj = {"train":{"input": msgs[0],
+                # "token_usage_total": msgs[2],
+                # "step_count": msgs[1]}}
+                obj = {"input": msgs[0],
+                "token_usage_total": msgs[2],
+                "step_count": msgs[1],
+                # "file_idx":msgs[3]
+                }
+                
+                f.write(json.dumps(obj, ensure_ascii=False) + "\n")
+            
+
+def find_subfolders_with_str(folder_path: str, keyword: str):
+    result = []
+    for name in os.listdir(folder_path):
+        full_path = os.path.join(folder_path, name)
+        if os.path.isdir(full_path) and keyword in name:
+            result.append(full_path)
+    return result
+
+if __name__ == "__main__":
+    
+
+  
+    folder_list = [
+        "/code/huanglisheng/work/R2E-Gym-memory/results/minimax_memory_multi_0.6_0.999999_swegym_rebench_1210_0120/minimax_memory_multi_0.6_0.999999_swegym_rebench_1210_0120_part_1.jsonl",
+        "/code/huanglisheng/work/R2E-Gym-memory/results/minimax_memory_multi_0.6_0.999999_swegym_rebench_1210_0120/minimax_memory_multi_0.6_0.999999_swegym_rebench_1210_0120_part_2.jsonl"
+    ]
+
+    memory_folder_list = [
+        "/code/huanglisheng/work/R2E-Gym-memory/memory_cache/minimax-ood-memory-agg-0120/minimax_memory_multi_0.6_0.999999_swegym_rebench_1210_0120_part_1",
+        "/code/huanglisheng/work/R2E-Gym-memory/memory_cache/minimax-ood-memory-agg-0120/minimax_memory_multi_0.6_0.999999_swegym_rebench_1210_0120_part_2"
+    ]
+    
+    
+    print("=="*50)
+    print("The following data is ready to be processed, please check carefully:")   
+    for f in folder_list:
+        print(f)
+    # exit()
+    print("=="*50)
+
+    process_folders_to_jsonl(folder_list, memory_folder_list,"/code/huanglisheng/work/R2E-Gym-memory/memory_sft_data/minimax_simple_test.jsonl")
+    # process_folders_to_jsonl(folder_list, "")

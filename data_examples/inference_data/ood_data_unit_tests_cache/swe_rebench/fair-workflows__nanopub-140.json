@@ -1,0 +1,84 @@
+{
+    "instance_id": "fair-workflows__nanopub-140",
+    "repo": "fair-workflows/nanopub",
+    "version": "1.2",
+    "repo_script_list": [
+        "git clone -o origin https://github.com/fair-workflows/nanopub /testbed",
+        "chmod -R 777 /testbed",
+        "cd /testbed",
+        "git reset --hard 859c68baed45027eba70fc222e08ccb3cedfa96b",
+        "git remote remove origin",
+        "source /opt/miniconda3/bin/activate",
+        "conda activate testbed",
+        "echo \"Current environment: $CONDA_DEFAULT_ENV\"",
+        "apt-get update",
+        "apt-get install -y gcc",
+        "pip install -e .[dev]",
+        "git config --global user.email setup@swebench.config",
+        "git config --global user.name SWE-bench",
+        "git commit --allow-empty -am SWE-bench"
+    ],
+    "eval_script_list": [
+        "source /opt/miniconda3/bin/activate",
+        "conda activate testbed",
+        "cd /testbed",
+        "git config --global --add safe.directory /testbed",
+        "cd /testbed",
+        "git status",
+        "git show",
+        "git -c core.fileMode=false diff 859c68baed45027eba70fc222e08ccb3cedfa96b",
+        "source /opt/miniconda3/bin/activate",
+        "conda activate testbed",
+        "pip install -e .[dev]",
+        "git checkout 859c68baed45027eba70fc222e08ccb3cedfa96b tests/test_setup_profile.py",
+        "git apply -v - <<'EOF_114329324912'\ndiff --git a/tests/test_setup_profile.py b/tests/test_setup_profile.py\nindex 7b1998f..34ad3cc 100644\n--- a/tests/test_setup_profile.py\n+++ b/tests/test_setup_profile.py\n@@ -103,7 +103,7 @@ def test_validate_orcid_id():\n     valid_ids = ['https://orcid.org/1234-5678-1234-5678',\n                  'https://orcid.org/1234-5678-1234-567X']\n     for orcid_id in valid_ids:\n-        assert validate_orcid_id(ctx=None, orcid_id=orcid_id) == orcid_id\n+        assert validate_orcid_id(ctx=None, param=None, orcid_id=orcid_id) == orcid_id\n \n     invalid_ids = ['https://orcid.org/abcd-efgh-abcd-efgh',\n                    'https://orcid.org/1234-5678-1234-567',\n@@ -112,4 +112,4 @@ def test_validate_orcid_id():\n                    '0000-0000-0000-0000']\n     for orcid_id in invalid_ids:\n         with pytest.raises(ValueError):\n-            validate_orcid_id(ctx=None, orcid_id=orcid_id)\n+            validate_orcid_id(ctx=None, param=None, orcid_id=orcid_id)\n\nEOF_114329324912",
+        ": '>>>>> Start Test Output'",
+        "pytest --no-header -rA --tb=line --color=no -p no:cacheprovider -W ignore::DeprecationWarning tests/test_setup_profile.py",
+        ": '>>>>> End Test Output'",
+        "git checkout 859c68baed45027eba70fc222e08ccb3cedfa96b tests/test_setup_profile.py"
+    ],
+    "env_script_list": [
+        "source /opt/miniconda3/bin/activate",
+        "conda create -n testbed python=3.9 -y",
+        "cat <<'EOF_59812759871' > $HOME/requirements.txt\nrdflib<6.0.0,>=5.0.0\nrequests\nclick==7.1.2\nyatiml\nEOF_59812759871",
+        "conda activate testbed && python -m pip install -r $HOME/requirements.txt",
+        "rm $HOME/requirements.txt",
+        "conda activate testbed",
+        "python -m pip install pytest pytest-cov pytest"
+    ],
+    "arch": "x86_64",
+    "FAIL_TO_PASS": [
+        "tests/test_setup_profile.py::test_validate_orcid_id"
+    ],
+    "PASS_TO_PASS": [
+        "tests/test_setup_profile.py::test_provided_keypair_copied_to_nanopub_dir",
+        "tests/test_setup_profile.py::test_create_this_is_me_rdf"
+    ],
+    "language": "py",
+    "docker_specs": {},
+    "namespace": null,
+    "base_image_tag": "latest",
+    "env_image_tag": "latest",
+    "instance_image_tag": "latest",
+    "install_config": {
+        "env_vars": null,
+        "env_yml_path": null,
+        "install": "pip install -e .[dev]",
+        "log_parser": "parse_log_pytest",
+        "no_use_env": null,
+        "packages": "requirements.txt",
+        "pip_packages": [
+            "pytest pytest-cov",
+            "pytest"
+        ],
+        "pre_install": [
+            "apt-get update",
+            "apt-get install -y gcc"
+        ],
+        "python": "3.9",
+        "reqs_path": [
+            "requirements.txt"
+        ],
+        "test_cmd": "pytest --no-header -rA --tb=line --color=no -p no:cacheprovider -W ignore::DeprecationWarning"
+    }
+}

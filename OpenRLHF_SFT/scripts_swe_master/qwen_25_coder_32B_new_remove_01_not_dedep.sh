@@ -1,0 +1,27 @@
+deepspeed --module openrlhf.cli.train_sft \
+   --max_len 81920 \
+   --dataset  /code/sunshuang/R2E-Gym-fork/results/1210_all_traj_not_filter._processed_Qwen2.5-Coder-32B-Instruct_1e-07_0.9999999.jsonl \
+   --input_key input \
+   --pretrain /models/songhuatong/Qwen2.5-Coder-32B-Instruct-80K \
+   --save_path /code/songhuatong/sft_models/15_qwen_25_coder_32B_1213_new_remove_01_not_dedep_11.5k_save_early \
+   --ckpt_path /code/songhuatong/sft_models/15_qwen_25_coder_32B_1213_new_remove_01_not_dedep_11.5k_save_early_ckpt \
+   --save_steps 40 \
+   --max_ckpt_num 3 \
+   --logging_steps 1 \
+   --train_batch_size 256 \
+   --micro_train_batch_size 1 \
+   --max_samples 1000000 \
+   --eval_steps -1 \
+   --zero_stage 3 \
+   --max_epochs 5 \
+   --packing_samples \
+   --bf16 \
+   --save_hf_ckpt \
+   --flash_attn \
+   --learning_rate 5e-5 \
+   --ring_attn_size 16 \
+   --ring_head_stride 2 \
+   --gradient_checkpointing \
+   --apply_chat_template \
+   --multiturn \
+   --use_tensorboard /code/songhuatong/tensorboard_qwen_25_coder_32B_80K_1125_minimax_glm \
