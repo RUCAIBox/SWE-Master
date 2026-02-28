@@ -233,7 +233,7 @@ bash ./R2E-Gym/rollout_trained_model/vllm_server_launch.sh
 bash ./R2E-Gym/rollout_trained_model/qwen25_coder_15k_lsp_with_gerenal_04.sh
 ```
 
-For Test-Time Scaling (TTS), we utilize [SWE-World](https://huggingface.co/RUC-AIBOX/SWE-World-SWR-32B-w-cot) as a verifier to perform candidate patch selection. Detailed methodology is available in the [original paper](https://arxiv.org/pdf/2602.03419), and the implementation can be found in the [SWE-World repository](https://github.com/RUCAIBox/SWE-World).
+For Test-Time Scaling (TTS), we utilize [SWE-World](https://huggingface.co/RUC-AIBOX/SWE-World-SWR-32B-w-cot) as a verifier to perform candidate patch selection. Detailed methodology is available in the [original paper](https://arxiv.org/pdf/2602.03419), and the implementation can be found in the [SWE-World repository](https://github.com/RUCAIBox/SWE-World), including the TTS pipeline described in [`README.md`](https://github.com/RUCAIBox/SWE-World/blob/main/swe_world/src/simulation/tts/README.md).
 
 ## SFT Training
 
